@@ -112,7 +112,7 @@ function Remove-Build {
   }
 }
 function Start-Build {
-  [CmdletBinding(
+  [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'Low',
     HelpURI = 'https://github.com/Azure-Devops-PowerShell-Module/build/blob/master/docs/Start-AzDevOpsBuild.md#start-azdevopsbuild',
     PositionalBinding = $true)]
   [OutputType([Object])]
@@ -170,13 +170,15 @@ function Start-Build {
       $Parameters = New-Object -TypeName psobject
       foreach ($item in $Variables){Add-Member -InputObject $parameters -MemberType NoteProperty -Name $item.Keys -Value $item[$item.Keys][0]}
       Add-Member -InputObject $Body -MemberType NoteProperty -Name parameters -Value ($Parameters |ConvertTo-Json -Compress)
-      $Result = Invoke-RestMethod -Method post -Uri $uriBuild -Headers $Global:azDevOpsHeader -ContentType 'application/json' -Body ($Body |ConvertTo-Json -Compress -Depth 10)
-      if ($Wait) {
-        do { 
-          Get-AzDevOpsBuild -Project $Project -BuildId $Result.id |out-null 
-        } until ((Get-AzDevOpsBuild -Project $Project -BuildId $Result.id).status -eq 'completed')
+      if ($PSCmdlet.ShouldProcess("Start", "Qeue Build $($Build.Id) from $($Project.name) Azure Devops Projects")) {
+        $Result = Invoke-RestMethod -Method post -Uri $uriBuild -Headers $Global:azDevOpsHeader -ContentType 'application/json' -Body ($Body |ConvertTo-Json -Compress -Depth 10)
+        if ($Wait) {
+          do {
+            Get-AzDevOpsBuild -Project $Project -BuildId $Result.id |out-null
+          } until ((Get-AzDevOpsBuild -Project $Project -BuildId $Result.id).status -eq 'completed')
+        }
+        return Get-AzDevOpsBuild -Project $Project -BuildId $Result.id
       }
-      return Get-AzDevOpsBuild -Project $Project -BuildId $Result.id
     }
     else {
       $PSCmdlet.ThrowTerminatingError(
