@@ -16,3 +16,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove-Build
 - Start-Build
 - Get-BuildDefinition
+- New-BuildFolder
+- Get-BuildFolder
+- Remove-BuildFolder

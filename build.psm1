@@ -24,15 +24,15 @@ function Get-Build {
     if ($Global:azDevOpsConnected) {
       switch ($PSCmdlet.ParameterSetName) {
         'Project' {
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds?api-version=5.1"
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds?api-version=5.1"
         }
         'ProjectId' {
           $Project = Get-AzDevOpsProject -ProjectId $ProjectId
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds?api-version=5.1"
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds?api-version=5.1"
         }
       }
       if ($BuildId) {
-        $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds/$($BuildId)?api-version=5.1"
+        $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds/$($BuildId)?api-version=5.1"
         return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader)
       }
       else {
@@ -69,46 +69,48 @@ function Remove-Build {
     [int]$BuildId
   )
 
-  $ErrorActionPreference = 'Stop'
-  $Error.Clear()
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
 
-  try {
-    #
-    # Are we connected
-    #
-    if ($Global:azDevOpsConnected) {
-      switch ($PSCmdlet.ParameterSetName) {
-        'ProjectId' {
-          $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+          }
         }
-      }
-      $Build = Get-AzDevOpsBuild -ProjectId $Project.Id -BuildId $BuildId
-      if (!($Build.deleted)) {
-        $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds/$($Build.Id)?api-version=5.1"
-        if ($PSCmdlet.ShouldProcess("Delete", "Remove Build $($Build.Id) from $($Project.name) Azure Devops Projects")) {
-          $Result = Invoke-RestMethod -Uri $uriProjects -Method Delete -Headers $Global:azDevOpsHeader
+        $Build = Get-AzDevOpsBuild -ProjectId $Project.Id -BuildId $BuildId
+        if (!($Build.deleted)) {
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds/$($Build.Id)?api-version=5.1"
+          if ($PSCmdlet.ShouldProcess("Delete", "Remove Build $($Build.Id) from $($Project.name) Azure Devops Projects")) {
+            $Result = Invoke-RestMethod -Uri $uriProjects -Method Delete -Headers $Global:azDevOpsHeader
+          }
+          if (!($Result)) {
+            return "Build : $($Build.id) removed from Project : $($Project.name)"
+          }
         }
-        if (!($Result)) {
-          return "Build : $($Build.id) removed from Project : $($Project.name)"
+        else {
+          return "Build : $($Build.id) was deleted on $(Get-Date ($Build.deletedDate)) by $($Build.deletedBy.displayName)"
         }
       }
       else {
-        return "Build : $($Build.id) was deleted on $(Get-Date ($Build.deletedDate)) by $($Build.deletedBy.displayName)"
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
       }
     }
-    else {
-      $PSCmdlet.ThrowTerminatingError(
-        [System.Management.Automation.ErrorRecord]::new(
-          ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
-          'Projects.Functions',
-          [System.Management.Automation.ErrorCategory]::OpenError,
-          $MyObject
-        )
-      )
+    catch {
+      throw $_
     }
-  }
-  catch {
-    throw $_
   }
 }
 function Start-Build {
@@ -126,73 +128,75 @@ function Start-Build {
     [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
     [int]$DefinitionId,
     [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
-    [Parameter(ValueFromPipeline, Mandatory = $false, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Project')]
     [hashtable[]]$Variables,
     [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
-    [Parameter(ValueFromPipeline, Mandatory = $false, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'Project')]
     [switch]$Wait
   )
 
-  $ErrorActionPreference = 'Stop'
-  $Error.Clear()
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
 
-  try {
-    #
-    # Are we connected
-    #
-    if ($Global:azDevOpsConnected) {
-      switch ($PSCmdlet.ParameterSetName) {
-        'Project' {
-        }
-        'ProjectId' {
-          $Project = Get-AzDevOpsProject -ProjectId $ProjectId
-          $Definition = Get-AzDevOpsBuildDefinition -ProjectId $Project.Id -DefinitionId $DefinitionId
-        }
-      }
-      $uriBuild = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds?api-version=5.1"
+    try {
       #
-      # Check that variables exist in defintion
+      # Are we connected
       #
-      foreach ($key in $Variables.keys) {
-        if (!($Definition.variables | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name).Contains($key)) {
-          $PSCmdlet.ThrowTerminatingError(
-            [System.Management.Automation.ErrorRecord]::new(
-              ([System.Management.Automation.ItemNotFoundException]"One or more variables not found in Build Definition"),
-              'Projects.Functions',
-              [System.Management.Automation.ErrorCategory]::OpenError,
-              $MyObject
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+            $Definition = Get-AzDevOpsBuildDefinition -ProjectId $Project.Id -DefinitionId $DefinitionId
+          }
+        }
+        $uriBuild = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds?api-version=5.1"
+        #
+        # Check that variables exist in defintion
+        #
+        foreach ($key in $Variables.keys) {
+          if (!($Definition.variables | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name).Contains($key)) {
+            $PSCmdlet.ThrowTerminatingError(
+              [System.Management.Automation.ErrorRecord]::new(
+                ([System.Management.Automation.ItemNotFoundException]"One or more variables not found in Build Definition"),
+                'Projects.Functions',
+                [System.Management.Automation.ErrorCategory]::OpenError,
+                $MyObject
+              )
             )
+          }
+        }
+        $Body = New-Object -TypeName psobject
+        Add-Member -InputObject $Body -MemberType NoteProperty -Name definition -Value $Definition
+        $Parameters = New-Object -TypeName psobject
+        foreach ($item in $Variables) { Add-Member -InputObject $parameters -MemberType NoteProperty -Name $item.Keys -Value $item[$item.Keys][0] }
+        Add-Member -InputObject $Body -MemberType NoteProperty -Name parameters -Value ($Parameters | ConvertTo-Json -Compress)
+        if ($PSCmdlet.ShouldProcess("Start", "Qeue Build $($Build.Id) from $($Project.name) Azure Devops Projects")) {
+          $Result = Invoke-RestMethod -Method post -Uri $uriBuild -Headers $Global:azDevOpsHeader -ContentType 'application/json' -Body ($Body | ConvertTo-Json -Compress -Depth 10)
+          if ($Wait) {
+            do {
+              Get-AzDevOpsBuild -Project $Project -BuildId $Result.id | out-null
+            } until ((Get-AzDevOpsBuild -Project $Project -BuildId $Result.id).status -eq 'completed')
+          }
+          return Get-AzDevOpsBuild -Project $Project -BuildId $Result.id
+        }
+      }
+      else {
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
           )
-        }
-      }
-      $Body = New-Object -TypeName psobject
-      Add-Member -InputObject $Body -MemberType NoteProperty -Name definition -Value $Definition
-      $Parameters = New-Object -TypeName psobject
-      foreach ($item in $Variables){Add-Member -InputObject $parameters -MemberType NoteProperty -Name $item.Keys -Value $item[$item.Keys][0]}
-      Add-Member -InputObject $Body -MemberType NoteProperty -Name parameters -Value ($Parameters |ConvertTo-Json -Compress)
-      if ($PSCmdlet.ShouldProcess("Start", "Qeue Build $($Build.Id) from $($Project.name) Azure Devops Projects")) {
-        $Result = Invoke-RestMethod -Method post -Uri $uriBuild -Headers $Global:azDevOpsHeader -ContentType 'application/json' -Body ($Body |ConvertTo-Json -Compress -Depth 10)
-        if ($Wait) {
-          do {
-            Get-AzDevOpsBuild -Project $Project -BuildId $Result.id |out-null
-          } until ((Get-AzDevOpsBuild -Project $Project -BuildId $Result.id).status -eq 'completed')
-        }
-        return Get-AzDevOpsBuild -Project $Project -BuildId $Result.id
-      }
-    }
-    else {
-      $PSCmdlet.ThrowTerminatingError(
-        [System.Management.Automation.ErrorRecord]::new(
-          ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
-          'Projects.Functions',
-          [System.Management.Automation.ErrorCategory]::OpenError,
-          $MyObject
         )
-      )
+      }
     }
-  }
-  catch {
-    throw $_
+    catch {
+      throw $_
+    }
   }
 }
 function Get-BuildLog {
@@ -214,45 +218,47 @@ function Get-BuildLog {
     [int]$LogId
   )
 
-  $ErrorActionPreference = 'Stop'
-  $Error.Clear()
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
 
-  try {
-    #
-    # Are we connected
-    #
-    if ($Global:azDevOpsConnected) {
-      switch ($PSCmdlet.ParameterSetName) {
-        'Project' {
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds/$($Build.Id)/logs?api-version=5.1"
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+            $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds/$($Build.Id)/logs?api-version=5.1"
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+            $Build = Get-AzDevOpsBuild -ProjectId $Project.id -BuildId $BuildId
+            $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds/$($Build.Id)/logs?api-version=5.1"
+          }
         }
-        'ProjectId' {
-          $Project = Get-AzDevOpsProject -ProjectId $ProjectId
-          $Build = Get-AzDevOpsBuild -ProjectId $Project.id -BuildId $BuildId
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds/$($Build.Id)/logs?api-version=5.1"
+        if ($LogId) {
+          $uriProjects = $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/builds/$($Build.Id)/logs/$($LogId)?api-version=5.1"
+          return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader)
         }
-      }
-      if ($LogId) {
-        $uriProjects = $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/builds/$($Build.Id)/logs/$($LogId)?api-version=5.1"
-        return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader)
+        else {
+          return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader).Value
+        }
       }
       else {
-        return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader).Value
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
       }
     }
-    else {
-      $PSCmdlet.ThrowTerminatingError(
-        [System.Management.Automation.ErrorRecord]::new(
-          ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
-          'Projects.Functions',
-          [System.Management.Automation.ErrorCategory]::OpenError,
-          $MyObject
-        )
-      )
+    catch {
+      throw $_
     }
-  }
-  catch {
-    throw $_
   }
 }
 function Get-BuildDefinition {
@@ -270,43 +276,213 @@ function Get-BuildDefinition {
     [int]$DefinitionId
   )
 
-  $ErrorActionPreference = 'Stop'
-  $Error.Clear()
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
 
-  try {
-    #
-    # Are we connected
-    #
-    if ($Global:azDevOpsConnected) {
-      switch ($PSCmdlet.ParameterSetName) {
-        'Project' {
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/definitions?api-version=5.1"
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+            $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/definitions?api-version=5.1"
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+            $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/definitions?api-version=5.1"
+          }
         }
-        'ProjectId' {
-          $Project = Get-AzDevOpsProject -ProjectId $ProjectId
-          $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/definitions?api-version=5.1"
+        if ($DefinitionId) {
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/definitions/$($DefinitionId)?api-version=5.1"
+          return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader)
         }
-      }
-      if ($DefinitionId) {
-        $uriProjects = $Global:azDevOpsOrg + "/$($Project.Id)/_apis/build/definitions/$($DefinitionId)?api-version=5.1"
-        return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader)
+        else {
+          return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader).Value
+        }
       }
       else {
-        return (Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader).Value
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
       }
     }
-    else {
-      $PSCmdlet.ThrowTerminatingError(
-        [System.Management.Automation.ErrorRecord]::new(
-          ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
-          'Projects.Functions',
-          [System.Management.Automation.ErrorCategory]::OpenError,
-          $MyObject
-        )
-      )
+    catch {
+      throw $_
     }
   }
-  catch {
-    throw $_
+}
+function Get-BuildFolder {
+  [CmdletBinding(
+    HelpURI = 'https://github.com/Azure-Devops-PowerShell-Module/build/blob/master/docs/Get-AzDevOpsBuildFolder.md#get-azdevopsbuildfolder',
+    PositionalBinding = $true)]
+  [OutputType([Object])]
+  param (
+    [Parameter(ValueFromPipeline, Mandatory = $false, ParameterSetName = 'Project')]
+    [object]$Project,
+    [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
+    [Guid]$ProjectId,
+    [Parameter(Mandatory = $false, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
+    [string]$Path
+  )
+
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
+
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+          }
+        }
+        if ($Path) {
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/folders?api-version=5.1-preview.2&path=$($Path.Replace('\','/'))"
+        }
+        else {
+          $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/folders?api-version=5.1-preview.2"
+        }
+        Invoke-RestMethod -Uri $uriProjects -Method get -Headers $Global:azDevOpsHeader | Select-Object -ExpandProperty Value
+      }
+      else {
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
+      }
+    }
+    catch {
+      throw $_
+    }
+  }
+}
+function New-BuildFolder {
+  [CmdletBinding(
+    HelpURI = 'https://github.com/Azure-Devops-PowerShell-Module/build/blob/master/docs/New-AzDevOpsBuildFolder.md#new-azdevopsbuildfolder',
+    PositionalBinding = $true)]
+  [OutputType([Object])]
+  param (
+    [Parameter(ValueFromPipeline, Mandatory = $false, ParameterSetName = 'Project')]
+    [object]$Project,
+    [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
+    [Guid]$ProjectId,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ProjectId')]
+    [string]$Name,
+    [Parameter(Mandatory = $false, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
+    [string]$Description
+  )
+
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
+
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+          }
+        }
+        $Body = New-Object -TypeName psobject
+        if ($Name) { Add-Member -InputObject $Body -MemberType NoteProperty -Name Path -Value $Name.Replace('\', '/') }
+        if ($Description) { Add-Member -InputObject $Body -MemberType NoteProperty -Name Description -Value $Description }
+
+        $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/folders?path=$($Name.Replace('\','/'))&api-version=5.1-preview.2"
+        Invoke-RestMethod -Uri $uriProjects -Method Put -Headers $Global:azDevOpsHeader -Body ($Body | ConvertTo-Json) -ContentType 'application/json'
+      }
+      else {
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
+      }
+    }
+    catch {
+      throw $_
+    }
+  }
+}
+function Remove-BuildFolder {
+  [CmdletBinding(SupportsShouldProcess, ConfirmImpact = 'High',
+    HelpURI = 'https://github.com/Azure-Devops-PowerShell-Module/build/blob/master/docs/Remove-AzDevOpsBuildFolder.md#remove-azdevopsbuildfolder',
+    PositionalBinding = $true)]
+  [OutputType([string])]
+  param (
+    [Parameter(ValueFromPipeline, Mandatory = $false, ParameterSetName = 'Project')]
+    [object]$Project,
+    [Parameter(Mandatory = $false, ParameterSetName = 'ProjectId')]
+    [Guid]$ProjectId,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Project')]
+    [Parameter(Mandatory = $true, ParameterSetName = 'ProjectId')]
+    [string]$Name
+  )
+
+  process {
+    $ErrorActionPreference = 'Stop'
+    $Error.Clear()
+
+    try {
+      #
+      # Are we connected
+      #
+      if ($Global:azDevOpsConnected) {
+        switch ($PSCmdlet.ParameterSetName) {
+          'Project' {
+          }
+          'ProjectId' {
+            $Project = Get-AzDevOpsProject -ProjectId $ProjectId
+          }
+        }
+
+        $Folder = Get-AzDevOpsBuildFolder -Project $Project -Path $Name
+
+        $uriProjects = $Global:azDevOpsOrg + "$($Project.Id)/_apis/build/folders/?api-version=5.0-preview.2&path=$($Folder.Path)"
+        if ($PSCmdlet.ShouldProcess("Delete", "Remove Folder $($Name) from $($Project.name) Azure Devops Projects")) {
+          Invoke-RestMethod -Uri $uriProjects -Method Delete -Headers $Global:azDevOpsHeader
+          $Project |Get-AzDevOpsBuildFolder
+        }
+      }
+      else {
+        $PSCmdlet.ThrowTerminatingError(
+          [System.Management.Automation.ErrorRecord]::new(
+            ([System.Management.Automation.ItemNotFoundException]"Not connected to Azure DevOps, please run Connect-AzDevOpsOrganization"),
+            'Projects.Functions',
+            [System.Management.Automation.ErrorCategory]::OpenError,
+            $MyObject
+          )
+        )
+      }
+    }
+    catch {
+      throw $_
+    }
   }
 }
